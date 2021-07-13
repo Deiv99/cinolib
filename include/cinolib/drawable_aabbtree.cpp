@@ -59,8 +59,8 @@ void DrawableAABBtree::updateGL(const AABBtreeNode *node)
 {
 
     // In questo modo solo i nodi foglie vengono rappresentati nell'aabbtrre
-
-    if(node->children[1] != nullptr && node->children[1] != nullptr)
+/*
+    if(node->children[0] != nullptr && node->children[1] != nullptr)
     {
         for(int i=0; i<2; ++i) updateGL(node->children[i]);
     } else {
@@ -68,6 +68,14 @@ void DrawableAABBtree::updateGL(const AABBtreeNode *node)
         if (node->item_indices.size() == 1) {
             render_list.push_back(DrawableAABB(node->bbox.min, node->bbox.max));
         }
+    }
+*/
+    // Se volessi stampare tutto l'albero
+
+    render_list.push_back(DrawableAABB(node->bbox.min, node->bbox.max));
+    if(node->children[0] != nullptr && node->children[1] != nullptr)
+    {
+        for(int i=0; i<2; ++i) updateGL(node->children[i]);
     }
 
 }

@@ -13,6 +13,15 @@ namespace cinolib
 {
 
 CINO_INLINE
+Split::Split(AABBtreeNode *node) {
+
+    edge = findLongestEdge(node->bbox);
+    // Median non viene inizializzato
+}
+
+//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+CINO_INLINE
 AABBtreeNode::~AABBtreeNode()
 {
     // Distruttore
@@ -71,36 +80,175 @@ void AABBtree::build()
 
     for(auto it : items) root->bbox.push(it->aabb);
 
-    tree_depth = 1;
+    subdivide(root);
 
-    // Dopo aver creato la radice, dobbiamo dividerla
-    // Visto che dobbiamo calcolare la mediana del lato più lungo
-    // Si prende l'aabb e si vede quale lato è il più lungo
-    // Si prende poi l'oggetto e si cercano le coordinate di quel lato e si fa la mediana, dalla mediana si creano i figli
-
-    int flag = findLongestEdge(root->bbox);
-
-    subdivide(root,findMedian(root));
-
+    tree_depth = returnTreeDepth(root);
 
     // Debug Info
-    Time::time_point t1 = Time::now();
-    double t = how_many_seconds(t0,t1);
-    std::cout << ":::::::::::::::::::::::::::::::::::::::::::::::::::" << std::endl;
-    std::cout << "AABBTree created (" << t << "s)                      " << std::endl;
-    std::cout << "#Items                   : " << items.size()         << std::endl;
-    std::cout << "#Leaves                  : " << leaves.size()        << std::endl;
-    std::cout << "Depth                    : " << tree_depth           << std::endl;
-    std::cout << "Flag                     : " << flag                 << std::endl;
-    std::cout << ":::::::::::::::::::::::::::::::::::::::::::::::::::" << std::endl;
+    if(print_debug_info)
+    {
+        Time::time_point t1 = Time::now();
+        double t = how_many_seconds(t0,t1);
+        std::cout << ":::::::::::::::::::::::::::::::::::::::::::::::::::" << std::endl;
+        std::cout << "AABBTree created (" << t << "s)                    " << std::endl;
+        std::cout << "#Items                   : " << items.size()         << std::endl;
+        std::cout << "#Leaves                  : " << leaves.size()        << std::endl;
+        std::cout << "Depth                    : " << tree_depth           << std::endl;
+        std::cout << ":::::::::::::::::::::::::::::::::::::::::::::::::::" << std::endl;
+    }
+}
+
+// Nuova versione della subdivide
+CINO_INLINE
+void AABBtree::subdivide(AABBtreeNode *node) {
+
+    if (node->item_indices.size() > 1) {
+
+        Split *split = new Split(node);
+        split->median = findMedian(node,split->edge);
+
+        // Queste due ci serviranno per andare a creare i figli alla fine
+        AABB left, right; // AABB del figlio sinistro e destro
+        std::vector <uint> vleft, vright; // Item indices del figlio sinistro e figlio destro
+
+        for (uint it : node->item_indices) {
+
+            if (bothChildren(*split, it)) {
+
+                if (differenceSize(vleft,vright) < 0) {
+                    left.push(items.at(it)->aabb);
+                    vleft.push_back(it);
+                } else {
+                    right.push(items.at(it)->aabb);
+                    vright.push_back(it);
+                }
+
+            } else {
+
+                switch (split->edge) {
+                case 0: // Asse delle x
+                    if (items.at(it)->aabb.center().x() < split->median) {
+                        left.push(items.at(it)->aabb);
+                        vleft.push_back(it);
+                    } else {
+                        right.push(items.at(it)->aabb);
+                        vright.push_back(it);
+                    }
+                    break;
+                case 1: // Asse delle y
+                    if (items.at(it)->aabb.center().y() < split->median) {
+                        left.push(items.at(it)->aabb);
+                        vleft.push_back(it);
+                    } else {
+                        right.push(items.at(it)->aabb);
+                        vright.push_back(it);
+                    }
+                    break;
+                case 2: // Asse delle z
+                    if (items.at(it)->aabb.center().z() < split->median) {
+                        left.push(items.at(it)->aabb);
+                        vleft.push_back(it);
+                    } else {
+                        right.push(items.at(it)->aabb);
+                        vright.push_back(it);
+                    }
+                    break;
+                }
+            }
+
+        }
+
+        assert(!vleft.empty() && !vright.empty());
+
+        node->children[0] = new AABBtreeNode(node, left);
+        node->children[1] = new AABBtreeNode(node, right);
+
+        node->children[0]->item_indices = vleft;
+        node->children[1]->item_indices = vright;
+
+        // A catena tramite ricorsione
+        if (node->children[0]->item_indices.size() > 1) {
+            subdivide(node->children[0]);
+        }
+        if (node->children[1]->item_indices.size() > 1)
+            subdivide(node->children[1]);
+
+
+    } // Fine if iniziale
+
 
 }
 
+int AABBtree::returnTreeDepth(AABBtreeNode *node) {
+
+    if (node == nullptr) return 0;
+    int left = returnTreeDepth(node->children[0]);
+    int right = returnTreeDepth(node->children[1]);
+
+    if (left > right)
+        return 1 + left;
+    else
+        return 1 + right;
+}
+
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// FUNZIONI AUSILIARIE AABBTREE
+
+double AABBtree::findMedian(AABBtreeNode *node, int edge) {
+
+    std::vector <double> list;
+
+    // MEDIANA SUI CENTROIDI
+    for (uint it : node->item_indices) {
+
+        switch(edge) {
+            case 0: // Asse delle x
+                list.push_back(items.at(it)->aabb.center().x());
+                break;
+            case 1: // Asse delle y
+                list.push_back(items.at(it)->aabb.center().y());
+                break;
+            case 2: // Asse delle z
+                list.push_back(items.at(it)->aabb.center().z());
+                break;
+        }
+
+    }
+
+    std::sort(list.begin(),list.end());
+
+    // Si ritorna il valore in mezzo alla lista ( la precisione in caso di numeri dispari non è essenziale )
+    return list[list.size()/2];
+
+}
+
+// Funzione ausiliaria per sapere se un triangolo si trovi in mezzo a due triangoli
+CINO_INLINE
+bool AABBtree::bothChildren (Split split, int it) {
+
+    switch(split.edge) {
+        case 0: // Asse delle x
+            return split.median == items.at(it)->aabb.center().x();
+        case 1: // Asse delle y
+            return split.median == items.at(it)->aabb.center().y();
+        case 2: // Asse delle z
+            return split.median == items.at(it)->aabb.center().z();
+    }
+
+    return false;
+}
+
+CINO_INLINE
+int AABBtree::differenceSize (std::vector<uint> left, std::vector<uint> right) {
+    return left.size() - right.size();
+}
+
+//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// FUNZIONI SPLIT
 
 // Funzione che trova il lato più lungo dell'aabb
 CINO_INLINE
-int AABBtree::findLongestEdge(AABB box) {
+int Split::findLongestEdge(AABB box) {
 
     vec3d min = box.min;
     vec3d max = box.max;
@@ -114,363 +262,6 @@ int AABBtree::findLongestEdge(AABB box) {
 
 }
 
-// Funzione che calcola il centroide di un triangolo (non è mai ottimizzato)
-CINO_INLINE
-vec3d AABBtree::findCentroid (Triangle t) {
-
-    vec3d bar;
-    bar.x() = ((t.v[0].x() + t.v[1].x() + t.v[2].x())/3);
-    bar.y() = ((t.v[0].y() + t.v[1].y() + t.v[2].y())/3);
-    bar.z() = ((t.v[0].z() + t.v[1].z() + t.v[2].z())/3);
-
-    /*
-    std::cout << "Baricentro X: " <<  bar.x()     << std::endl;
-    std::cout << "Baricentro Y: " <<  bar.y()     << std::endl;
-    std::cout << "Baricentro Z: " <<  bar.z()     << std::endl;
-    */
-    return bar;
-}
-
-// Funzione che trova la mediana degli oggetti
-CINO_INLINE
-double AABBtree::findMedian (AABBtreeNode *node) {
-
-    // So che quando si fa la buildfrommesh, nel vettore item viene inserito il triangolo
-    // Quindi in items ho i vertici dei triangoli dalla quale prendere il valore
-    // In items indices invece ho gli indici che mi servono di items e del vettore dei triangoli
-
-    // In questo vector salveremo tutte le coordinate dei triangoli rispettive al lato più lungo
-    std::vector <double> list;
-    int flag = findLongestEdge(node->bbox);
-    vec3d baricentro;
-
-
-    // MEDIANA SUI CENTROIDI
-    for (uint it : node->item_indices) {
-
-        baricentro = findCentroid(vecTriangles[it]);
-
-        switch(flag) {
-            case 0: // Asse delle x
-                list.push_back(baricentro.x());
-                break;
-            case 1: // Asse delle yù
-                list.push_back(baricentro.y());
-                break;
-            case 2: // Asse delle z
-                list.push_back(baricentro.z());
-                break;
-        }
-
-    }
-
-    std::sort(list.begin(),list.end());
-
-    // Si ritorna il valore in mezzo alla lista ( la precisione in caso di numeri dispari non è essenziale )
-    return list[list.size()/2];
-
-    /*
-     *
-     *  Pezzo di codice basato sui vertici, lo lascio per non perderlo
-     *
-     *
-        for (uint it : node->item_indices) {
-
-            switch(flag) {
-                case 0: // Asse delle x
-                    list.push_back(vecTriangles[it].v[0].x());
-                    list.push_back(vecTriangles[it].v[1].x());
-                    list.push_back(vecTriangles[it].v[2].x());
-                    break;
-                case 1: // Asse delle y
-                    list.push_back(vecTriangles[it].v[0].y());
-                    list.push_back(vecTriangles[it].v[1].y());
-                    list.push_back(vecTriangles[it].v[2].y());
-                    break;
-                case 2: // Asse delle z
-                    list.push_back(vecTriangles[it].v[0].z());
-                    list.push_back(vecTriangles[it].v[1].z());
-                    list.push_back(vecTriangles[it].v[2].z());
-                    break;
-            }
-
-        }
-
-        for (uint i = 0; i < list.size(); i++ ) {
-
-            std::cout << "#Valore Numero lista nuova " << i << ":   " <<  list[i]      << std::endl;
-
-        }
-
-        std::cout << "#Mediana nuova: " << list[list.size()/2]      << std::endl;
-
-        */
-
-}
-
-// Funzione che aggiorna la dimensione della bbox in base agli oggetti al suo interno
-// Quello che facciamo qui può essere riscritto nel for centrale per evitare cicli inutili
-CINO_INLINE
-void AABBtree::newBbox (AABBtreeNode *node) {
-
-    vec3d min;
-    vec3d max;
-
-    vec3d auxMax;
-    vec3d auxMin;
-
-    // Vengono inizializzati a valori impossibili i due vettori importanti
-    max.x() = -10;
-    max.y() = -10;
-    max.z() = -10;
-
-    min.x() = 10;
-    min.y() = 10;
-    min.z() = 10;
-
-    /*
-     * Stampa di aiuto
-     *
-    std::cout << "#Prima Max x: " << max.x() <<  std::endl;
-    std::cout << "#Prima Max y: " << max.y() <<  std::endl;
-    std::cout << "#Prima Max z: " << max.z() <<  std::endl;
-
-    std::cout << "#Prima Min x: " << min.x() <<  std::endl;
-    std::cout << "#Prima Min y: " << min.y() <<  std::endl;
-    std::cout << "#Prima Min z: " << min.z() <<  std::endl;
-    */
-
-    for (uint it : node->item_indices) {
-
-        // Molto grezzo bisogna pensare a come farlo meglio
-        auxMin = findMinCoordinates(vecTriangles[it]);
-        auxMax = findMaxCoordinates(vecTriangles[it]);
-
-        // Si fanno i vari controlli e si aggiornano i dati
-
-        // MIN
-        if (min.x() > auxMin.x())
-            min.x() = auxMin.x();
-        if (min.y() > auxMin.y())
-            min.y() = auxMin.y();
-        if (min.z() > auxMin.z())
-            min.z() = auxMin.z();
-
-        // MAX
-        if (max.x() < auxMax.x())
-            max.x() = auxMax.x();
-        if (max.y() < auxMax.y())
-            max.y() = auxMax.y();
-        if (max.z() < auxMax.z())
-            max.z() = auxMax.z();
-
-        /*
-        std::cout << "#Fin Max x: " << max.x() <<  std::endl;
-        std::cout << "#Fin Max y: " << max.y() <<  std::endl;
-        std::cout << "#Fin Max z: " << max.z() <<  std::endl;
-
-        std::cout << "#Fin Min x: " << min.x() <<  std::endl;
-        std::cout << "#Fin Min y: " << min.y() <<  std::endl;
-        std::cout << "#Fin Min z: " << min.z() <<  std::endl;
-        */
-
-        // Si aggiorna il nuovo bounding box del nodo
-        node->bbox = AABB(min,max);
-
-    }
-
-}
-
-
-CINO_INLINE
-void AABBtree::subdivide(AABBtreeNode *node, double median) {
-
-    // Creiamo i due figli
-    vec3d min = node->bbox.min;
-    vec3d max = node->bbox.max;
-    int flag = findLongestEdge(node->bbox);
-
-    if (node->item_indices.size() > 1) {
-
-        // Vengono creati i due figli e le bbox all'inizio sono molto grandi per essere poi ristrette più tardi
-        // In base al lato si creano i due figli
-        switch(flag) {
-            case 0: // Asse delle x
-                node->children[0] = new AABBtreeNode(node, AABB(vec3d(min[0], min[1], min[2]), vec3d(median, max[1], max[2])));
-                node->children[1] = new AABBtreeNode(node, AABB(vec3d(median, min[1], min[2]), vec3d(max[0], max[1], max[2])));
-                break;
-            case 1: // Asse delle y
-                node->children[0] = new AABBtreeNode(node, AABB(vec3d(min[0], min[1], min[2]), vec3d(max[0], median, max[2])));
-                node->children[1] = new AABBtreeNode(node, AABB(vec3d(min[0], median, min[2]), vec3d(max[0], max[1], max[2])));
-                break;
-            case 2: // Asse delle z
-                node->children[0] = new AABBtreeNode(node, AABB(vec3d(min[0], min[1], min[2]), vec3d(max[0], max[1], median)));
-                node->children[1] = new AABBtreeNode(node, AABB(vec3d(min[0], min[1], median), vec3d(max[0], max[1], max[2])));
-                break;
-        }
-
-        for(uint it : node->item_indices)
-        {
-
-            for(int i=0; i<2; ++i)
-            {
-                assert(node->children[i]!=nullptr);
-
-                /*
-                    Controllo che il triangolo possa stare sia nel primo figlio che nel secondo
-                    Nel caso in cui questa cosa sia possibile, controllo le dimensioni dell'item indices dei figlio e lo metto in quello più piccolo
-                    Sennò li inserisco tranquillamente dove stanno
-                */
-
-                if (bothChildren(node,it)) {
-
-                    i++; // Saltiamo il for quando entra la prima volta
-
-                    if (differenceSize(node) < 0) {
-                        node->children[0]->item_indices.push_back(it);
-                    } else {
-                        node->children[1]->item_indices.push_back(it);
-                    }
-
-                } else {
-                    if(node->children[i]->bbox.contains(findCentroid(vecTriangles[it]))) {
-                        node->children[i]->item_indices.push_back(it);
-                    }
-                }
-/*
-                // Se la bbox contiene il centroide allora si inserisce nella push back
-                if(node->children[i]->bbox.contains(findCentroid(vecTriangles[it])))
-                {
-                    // Bisogna fare un controllo sul fatto che un triangolo sia già da una parte o dall'altra
-                    // Per esempio...
-                    // Se un baricentro si trova al centro di una divisione di una bounding box
-                    // vuol dire che si può trovare dia nel figlio destro che nel figlio sinistro
-                    // Quindi se si trova già nel primo figlio non ha senso metterlo nel secondo
-                    // Sarebbe anche figo controllare che le size siano simili e quindi mettere un coso da una parte o dall'altra
-
-                    //node->children[i]->item_indices.push_back(it);
-
-
-                    if (i == 0) {
-                        // Primo figlio
-                        node->children[i]->item_indices.push_back(it);
-                        std::cout << "#Item 0: " << node->children[0]->item_indices.back()         << std::endl;
-
-                    } else {
-                        // Secondo figlio
-                        // Se l'ultimo elemento del primo figlio è diverso da it, questo vuol dire che it non è nel primo figlio
-                        if (node->children[0]->item_indices.size() > 0) {
-
-                            // Se la dimensione di questa differenza è maggiore di uno vuol dire che l'albero non è bilanciato
-                            // Potrebbe provocare qualche problema
-                            if (!(differenceSize(node) < -1 && differenceSize(node) > 1))
-
-                            if (node->children[0]->item_indices.back() != it) {
-                                node->children[1]->item_indices.push_back(it);
-                                std::cout << "#Item 1: " << node->children[1]->item_indices.back()         << std::endl;
-                            }
-
-                        } else {
-                            node->children[i]->item_indices.push_back(it);
-                        }
-
-                    }
-
-                }
-*/
-
-            } // Fine for dei figli
-        } // Fine for di item_indices
-
-        newBbox(node->children[0]);
-        newBbox(node->children[1]);
-
-
-        // A catena tramite ricorsione
-        if (node->children[0]->item_indices.size() > 1) {
-            tree_depth++;
-            subdivide(node->children[0], findMedian(node->children[0]));
-        }
-        if (node->children[1]->item_indices.size() > 1)
-            subdivide(node->children[1], findMedian(node->children[1]));
-
-
-        // Nell'octree avviene questo... non so se sia utile per risparmiare spazio anche nell'aabbtree
-        // Quando dovremo fare le collisioni vedremo...
-        //node->item_indices.clear();
-    }
-
-}
-
-// Funzione ausiliaria per sapere se un triangolo si trovi in mezzo a due triangoli
-CINO_INLINE
-bool AABBtree::bothChildren (AABBtreeNode *node, int it) {
-    return (node->children[0]->bbox.contains(findCentroid(vecTriangles[it])) && node->children[1]->bbox.contains(findCentroid(vecTriangles[it])));
-}
-
-// Funzione ausiliaria per sapere la differenze tra le dimensioni di item indices di due nodi
-CINO_INLINE
-int AABBtree::differenceSize (AABBtreeNode *node) {
-    return node->children[0]->item_indices.size() - node->children[1]->item_indices.size();
-}
-
-// Trova le coordinate massime x y z dei tre vertici di un triangolo
-CINO_INLINE
-vec3d AABBtree::findMaxCoordinates (Triangle t) {
-
-    vec3d max;
-
-    max.x() = -10;
-    max.y() = -10;
-    max.z() = -10;
-
-    for (int i = 0; i < 3; i++) {
-
-    // MAX
-    if (max.x() < t.v[i].x())
-        max.x() = t.v[i].x();
-    if (max.y() < t.v[i].y())
-        max.y() = t.v[i].y();
-    if (max.z() < t.v[i].z())
-        max.z() = t.v[i].z();
-
-    }
-/*
-    std::cout << "#Aux Max x: " << max.x() <<  std::endl;
-    std::cout << "#Aux Max y: " << max.y() <<  std::endl;
-    std::cout << "#Aux Max z: " << max.z() <<  std::endl;
-*/
-    return max;
-}
-
-// Trova le coordinate minime x y z dei tre vertici di un triangolo
-CINO_INLINE
-vec3d AABBtree::findMinCoordinates (Triangle t) {
-
-    vec3d min;
-
-    min.x() = 10;
-    min.y() = 10;
-    min.z() = 10;
-
-    for (int i = 0; i < 3; i++) {
-
-    // MIN
-    if (min.x() > t.v[i].x())
-        min.x() = t.v[i].x();
-    if (min.y() > t.v[i].y())
-        min.y() = t.v[i].y();
-    if (min.z() > t.v[i].z())
-        min.z() = t.v[i].z();
-
-    }
-/*
-    std::cout << "#Aux Min x: " << min.x() <<  std::endl;
-    std::cout << "#Aux Min y: " << min.y() <<  std::endl;
-    std::cout << "#Aux Min z: " << min.z() <<  std::endl;
-*/
-    return min;
-}
 
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
@@ -510,6 +301,307 @@ CINO_INLINE
 void AABBtree::push_tetrahedron(const uint id, const std::vector<vec3d> & v)
 {
     items.push_back(new Tetrahedron(id,v.data()));
+}
+
+//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+CINO_INLINE
+void AABBtree::debug_mode(const bool b)
+{
+    print_debug_info = b;
+}
+
+//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// QUERY
+
+CINO_INLINE
+vec3d AABBtree::closest_point(const vec3d & p) const
+{
+    uint   id;
+    vec3d  pos;
+    double dist;
+    closest_point(p, id, pos, dist);
+    return pos;
+}
+
+CINO_INLINE
+void AABBtree::closest_point(const vec3d  & p,          // query point
+                                 uint   & id,         // id of the item T closest to p
+                                 vec3d  & pos,        // point in T closest to p
+                                 double & dist) const // distance between pos and p
+{
+
+    assert(root != nullptr);
+
+    typedef std::chrono::high_resolution_clock Time;
+    Time::time_point t0 = Time::now();
+
+    PrioQueue q;
+    // Se la root è inner
+    if(root->children[0] != nullptr)
+    {
+        // Si crea un Obj
+        Obj obj;
+        obj.node = root; // il nodo diventa la root
+        obj.dist = root->bbox.dist_sqrd(p); // e si calcola la distanza (?)
+        q.push(obj); // e viene pusghata nella coda prioritaria
+
+    }
+    else // in case the root is alrady a leaf...
+    {
+
+        // Se è una foglia vuol dire che ha un solo item_indices
+        assert(root->item_indices.size() == 1);
+
+        Obj obj;
+        obj.node  = root;
+        obj.index = root->item_indices[0];
+        obj.pos   = items.at(root->item_indices[0])->point_closest_to(p);
+        obj.dist  = obj.pos.dist_squared(p);
+        q.push(obj);
+
+    }
+
+    // Fino a quando il nodo nella coda prioritaria è inner si va (quindi non + una foglia)
+    while(q.top().node->children[0] != nullptr)
+    {
+        // Si prende il top
+        Obj obj = q.top();
+        q.pop();
+
+        // Si fanno tutti e due i figli
+        for(int i=0; i<2; ++i)
+        {
+            AABBtreeNode *child = obj.node->children[i];
+            // Se è inner
+            if(child->children[0] != nullptr)
+            {
+                Obj obj;
+                obj.node = child;
+                obj.dist = child->bbox.dist_sqrd(p);
+                q.push(obj); // SI PUSHA L'obj nella coda
+            }
+            // Se è una foglia
+            else
+            {
+                // Se è una foglia vuol dire che ha un solo item_indices
+                assert(child->item_indices.size() == 1);
+
+                Obj obj;
+                obj.node  = child;
+                obj.index = child->item_indices[0];
+                obj.pos   = items.at(child->item_indices[0])->point_closest_to(p);
+                obj.dist  = obj.pos.dist_squared(p);
+                q.push(obj);
+
+            }
+        }
+    }
+
+    if(print_debug_info)
+    {
+        Time::time_point t1 = Time::now();
+        std::cout << "Closest point\t" << how_many_seconds(t0,t1) << " seconds" << std::endl;
+    }
+
+    // Si arriva che al top della coda si ha una foglia e vengono salvate le sue informazioni, l'item rimasto alla fine è il punto più vicino
+    assert(q.top().index>=0);
+    id   = items.at(q.top().index)->id;
+    pos  = q.top().pos;
+    dist = q.top().dist;
+
+}
+
+// Qui stampiamo ogni volta l'id con relativa distanza per vedere se il risultato ufficiale combacia con uno di quelli ottenuti
+// perchè in molti casi ci potrebbe essere più di un punto distante lo stesso tanto da un altro punto e quinndi ci possono essere più risultati giusti
+CINO_INLINE
+void AABBtree::provaClosest(const vec3d & p,  uint & id, vec3d  & pos, double & dist) {
+
+    assert(root != nullptr);
+
+    std::cout << "############## PROVA CLOSEST POINT ###############"<< std::endl;
+
+    typedef std::chrono::high_resolution_clock Time;
+    Time::time_point t0 = Time::now();
+
+    dist = max_double;
+    id = -10;
+
+    // Variabili ausiliarie
+    double aux;
+    vec3d auxPos;
+    int cont = 0;
+
+    std::stack<AABBtreeNode*> lifo;
+
+    if(root->children[0] != nullptr) {
+        lifo.push(root);
+
+    } else {
+
+        // Se è una foglia vuol dire che ha un solo item_indices
+        assert(root->item_indices.size() == 1);
+
+        // Calcolare la distanza
+        pos = items.at(root->item_indices[0])->point_closest_to(p);
+        dist = pos.dist_squared(p);
+        id = root->item_indices[0];
+
+        // Stampa per vedere
+        std::cout << "Closest Point trovato nella Radice: Dist: " << dist << " Id: " << id << std::endl;
+        return;
+    }
+
+    while(!lifo.empty()) {
+
+        AABBtreeNode *node = lifo.top();
+        lifo.pop();
+
+        if(node->children[0] != nullptr) {
+            for(int i=0; i<2; ++i)
+            {
+                lifo.push(node->children[i]);
+            }
+        } else {
+            // Se siamo una foglia
+            assert(node->item_indices.size() == 1);
+            cont++;
+            auxPos = items.at(node->item_indices[0])->point_closest_to(p);
+            aux = auxPos.dist_squared(p);
+
+            // Se la distanza appena ottenuta è minore o uguale si aggiornano e si stampano
+            if (aux <= dist) {
+                pos = auxPos;
+                dist = aux;
+                id = node->item_indices[0];
+
+                // Qui si stampa la distanza che si è appena aggiunta e l'id dell'item che possiede
+                std::cout << "Closest Point trovato nell'albero: Dist: " << dist << " Id: " << id << std::endl;
+            }
+
+        }
+    }
+
+    Time::time_point t1 = Time::now();
+    std::cout << "Closest point Tempo Prova\t" << how_many_seconds(t0,t1) << " seconds" << std::endl;
+
+    std::cout << "CONTATORE: " << cont <<  std::endl;
+}
+
+// this query becomes exact if CINOLIB_USES_EXACT_PREDICATES is defined
+CINO_INLINE
+bool AABBtree::contains(const vec3d & p, const bool strict, uint & id) const
+{
+
+    // Dichiarazione per il tempo
+    typedef std::chrono::high_resolution_clock Time;
+    Time::time_point t0 = Time::now();
+
+    // Viene creato uno stack di nodi
+    std::stack<AABBtreeNode*> lifo;
+    if(root && root->bbox.contains(p,strict))
+    {
+        // Viene inserita la radice
+        lifo.push(root);
+    }
+
+    while(!lifo.empty())
+    {
+        // Il nodo prende la testa
+        AABBtreeNode *node = lifo.top();
+        lifo.pop();
+        assert(node->bbox.contains(p, strict));
+
+        // Se il nodo è interno
+        // non dovrebbe esserci bisogno di controllare anche il secondo figlio, perchè il controllo viene fatto nella costruzione dell'albero
+        if(node->children[0] != nullptr)
+        {
+            for(int i=0; i<2; ++i)
+            {
+                // Si fa un controllo sui 2 figli, nel vedere se il figlio contiene il vec3d dato
+                // Nel caso in cui questo succeda, viene pushato quel figlio nello stack
+                if(node->children[i]->bbox.contains(p,strict)) lifo.push(node->children[i]);
+            }
+        }
+        else // Questo else dovrebbe ssere se il nodo è una foglia
+        {
+
+            // Si controlla per ogni item_indices che contiene quel nodo (nel nostro caso, un nodo foglia contiene un solo item_indices)
+            for(uint i : node->item_indices)
+            {
+                // Se quell'item contiene il vec3d p
+                if(items.at(i)->contains(p,strict))
+                {
+                    // L'id prende il valore di quel item
+                    id = items.at(i)->id;
+                    // Viene stampato il tempo e si ritorna true
+                    if(print_debug_info)
+                    {
+                        Time::time_point t1 = Time::now();
+                        std::cout << "Contains query (first item)\t" << how_many_seconds(t0,t1) << " seconds" << std::endl;
+                    }
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+
+}
+
+// this query becomes exact if CINOLIB_USES_EXACT_PREDICATES is defined
+CINO_INLINE
+bool AABBtree::contains(const vec3d & p, const bool strict, std::unordered_set<uint> & ids) const
+{
+
+    typedef std::chrono::high_resolution_clock Time;
+    Time::time_point t0 = Time::now();
+
+    // ids viene pulito
+    ids.clear();
+
+    std::stack<AABBtreeNode*> lifo;
+    if(root && root->bbox.contains(p,strict))
+    {
+        lifo.push(root);
+    }
+
+    while(!lifo.empty())
+    {
+        AABBtreeNode *node = lifo.top();
+        lifo.pop();
+        assert(node->bbox.contains(p,strict));
+
+        if(node->children[0] != nullptr)
+        {
+            for(int i=0; i<2; ++i)
+            {
+                if(node->children[i]->bbox.contains(p,strict)) lifo.push(node->children[i]);
+            }
+        }
+        else
+        {
+            for(uint i : node->item_indices)
+            {
+                // Se la foglia contiene il vec3d allora in ids viene inserito l'id
+                if(items.at(i)->contains(p,strict))
+                {
+                    ids.insert(items.at(i)->id);
+                }
+            }
+        }
+    }
+
+    if(print_debug_info)
+    {
+        Time::time_point t1 = Time::now();
+        std::cout << "Contains query (all items)\t" << how_many_seconds(t0,t1) << " seconds" << std::endl;
+    }
+
+    // Si ritorna se l'ids è vuoto o no, se lo è vuol dire che il vec3d non è contenuto
+    return !ids.empty();
+
 }
 
 } // Fine namespace cinolib

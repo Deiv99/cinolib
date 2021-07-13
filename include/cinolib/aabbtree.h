@@ -18,9 +18,20 @@ class AABBtreeNode {
         AABBtreeNode        *children[2] = {nullptr, nullptr}; // Figli
         AABB                bbox;
         std::vector<uint>   item_indices; // Struttura di supporto a cosa serve esattamente?
+};
 
-        // Commento di item_indices originale:
-        // index Octree::items, avoiding to store a copy of the same object multiple times in each node it appears
+class Split {
+
+    public:
+
+        Split(AABBtreeNode *node);
+
+        int edge;
+        double median;
+
+        int findLongestEdge(AABB box);
+        vec3d findCentroid (AABB box);
+
 };
 
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -41,8 +52,6 @@ class AABBtree
 
     virtual ~AABBtree(); // Distruttore
 
-    // DA QUA BISOGNA CONTROLLARE COSA CI INTERESSA E COSA NO
-
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
     void push_point      (const uint id, const vec3d & v);
@@ -57,19 +66,13 @@ class AABBtree
 
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-    int findLongestEdge(AABB box);
-    void returnListCoordinates(AABBtreeNode *node, double * list);
-    double findMedian (AABBtreeNode *node);
-    void subdivide(AABBtreeNode *node, double median);
-    vec3d findCentroid (Triangle t);
-
-    void newBbox (AABBtreeNode *node);
+    double findMedian (AABBtreeNode *node, int edge);
+    void subdivide(AABBtreeNode *node);
+    int returnTreeDepth(AABBtreeNode *node);
 
     // Funzioni ausiliarie
-    int differenceSize (AABBtreeNode *node);
-    bool bothChildren (AABBtreeNode *node, int it);
-    vec3d findMaxCoordinates (Triangle t);
-    vec3d findMinCoordinates (Triangle t);
+    int differenceSize (std::vector<uint> left, std::vector<uint> right);   
+    bool bothChildren (Split split, int it);
 
     // BUILD ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
@@ -79,7 +82,6 @@ class AABBtree
     {
         assert(items.empty());
         items.reserve(m.num_polys());
-        vecTriangles.reserve(m.num_polys());
         for(uint pid=0; pid<m.num_polys(); ++pid)
         {
             for(uint i=0; i<m.poly_tessellation(pid).size()/3; ++i)
@@ -87,12 +89,6 @@ class AABBtree
                 vec3d v0 = m.vert(m.poly_tessellation(pid).at(3*i+0));
                 vec3d v1 = m.vert(m.poly_tessellation(pid).at(3*i+1));
                 vec3d v2 = m.vert(m.poly_tessellation(pid).at(3*i+2));
-
-                // Salvo i triangoli nel mio vector
-                vecTriangles[pid].id = pid;
-                vecTriangles[pid].v[0] = v0;
-                vecTriangles[pid].v[1] = v1;
-                vecTriangles[pid].v[2] = v2;
 
                 push_triangle(pid, {v0,v1,v2});
             }
@@ -157,16 +153,18 @@ class AABBtree
 
     // QUERIES :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-    /*
+    // QUESTA
     // returns pos, id and distance of the item that is closest to query point p
     void  closest_point(const vec3d & p, uint & id, vec3d & pos, double & dist) const;
     vec3d closest_point(const vec3d & p) const;
+    void  provaClosest(const vec3d & p,  uint & id, vec3d  & pos,double & dist);
 
+    // QUESTA PRIMA
     // returns respectively the first item and the full list of items containing query point p
     // note: this query becomes exact if CINOLIB_USES_EXACT_PREDICATES is defined
     bool contains(const vec3d & p, const bool strict, uint & id) const;
     bool contains(const vec3d & p, const bool strict, std::unordered_set<uint> & ids) const;
-
+/*
     // returns respectively the first and the full list of intersections
     // between items in the octree and a ray R(t) := p + t * dir
     bool intersects_ray(const vec3d & p, const vec3d & dir, double & min_t, uint & id) const; // first hit
@@ -177,15 +175,14 @@ class AABBtree
     bool intersects_segment (const vec3d s[], const bool ignore_if_valid_complex, std::unordered_set<uint> & ids) const;
     bool intersects_triangle(const vec3d t[], const bool ignore_if_valid_complex, std::unordered_set<uint> & ids) const;
     bool intersects_box     (const AABB  & b, std::unordered_set<uint> & ids) const;
+*/
 
-    */
 
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
     // Questi dati bisogna capire quando servono e per cosa possono tornarci utili
 
     // all items live here, and leaf nodes only store indices to items
-    std::vector<Triangle> vecTriangles;
     std::vector<SpatialDataStructureItem*>  items;
     AABBtreeNode                            *root = nullptr;
     std::vector<const AABBtreeNode*>        leaves;
@@ -206,7 +203,7 @@ class AABBtree
      * Greater e la typedef invece si basano sempre su Obj quindi non
      * ha senso tenerle attive anche per noi */
 
-    /*
+
     struct Obj
     {
         double      dist  = inf_double;
@@ -224,8 +221,10 @@ class AABBtree
     };
 
     typedef std::priority_queue<Obj,std::vector<Obj>,Greater> PrioQueue;
-    */
+
 };
+
+
 
 }
 
