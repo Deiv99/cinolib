@@ -3,7 +3,7 @@
 
 #include <cinolib/geometry/spatial_data_structure_item.h>
 #include <cinolib/meshes/meshes.h>
-#include <queue> // Probabilmente a noi non servirà
+#include <queue>
 
 namespace cinolib {
 
@@ -35,14 +35,6 @@ class Split {
 };
 
 //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
-/* Appunto del professore da controllare ovviamente su come creare un octree
- *
- *  Usage:
- *  i)   Create an empty octree
- *  ii)  Use the push_segment/triangle/tetrahedron facilities to populate it
- *  iii) Call build to make the tree
-*/
 
 class AABBtree
 {
@@ -96,7 +88,7 @@ class AABBtree
 
         build();
     }
-/*
+
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
     template<class M, class V, class E, class P>
@@ -146,7 +138,7 @@ class AABBtree
     }
 
 
-*/
+
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
     void debug_mode(const bool b);
@@ -180,8 +172,6 @@ class AABBtree
 
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
-    // Questi dati bisogna capire quando servono e per cosa possono tornarci utili
-
     // all items live here, and leaf nodes only store indices to items
     std::vector<SpatialDataStructureItem*>  items;
     AABBtreeNode                            *root = nullptr;
@@ -195,14 +185,6 @@ class AABBtree
     bool print_debug_info = false;
 
     // SUPPORT STRUCTURES ::::::::::::::::::::::::::::::::::::::::::::::::::::
-
-    // Queste strutture di supporto verranno utilizzate ?
-
-    /* La struct Obj viene utilizzata in closest point
-     * e intersect ray che sono cose che vedremo tra un bel po'
-     * Greater e la typedef invece si basano sempre su Obj quindi non
-     * ha senso tenerle attive anche per noi */
-
 
     struct Obj
     {

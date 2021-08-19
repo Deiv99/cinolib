@@ -20,7 +20,6 @@ class DrawableAABBtree : public AABBtree, public DrawableObject
 
         void  draw(const float scene_size=1) const;
 
-        // Queste due bisogna vedere a cosa servono e quando sono utilizzate
         vec3d scene_center() const;
         float scene_radius() const;
 

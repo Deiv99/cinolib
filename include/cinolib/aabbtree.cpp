@@ -582,14 +582,15 @@ bool AABBtree::contains(const vec3d & p, const bool strict, std::unordered_set<u
         }
         else
         {
-            for(uint i : node->item_indices)
+            // Se è una foglia vuol dire che ha un solo item_indices
+            assert(node->item_indices.size() == 1);
+
+            // Se la foglia contiene il vec3d allora in ids viene inserito l'id
+            if(items.at(node->item_indices[0])->contains(p,strict))
             {
-                // Se la foglia contiene il vec3d allora in ids viene inserito l'id
-                if(items.at(i)->contains(p,strict))
-                {
-                    ids.insert(items.at(i)->id);
-                }
+                ids.insert(items.at(node->item_indices[0])->id);
             }
+
         }
     }
 
