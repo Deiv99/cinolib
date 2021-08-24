@@ -526,22 +526,24 @@ bool AABBtree::contains(const vec3d & p, const bool strict, uint & id) const
         else // Questo else dovrebbe ssere se il nodo è una foglia
         {
 
-            // Si controlla per ogni item_indices che contiene quel nodo (nel nostro caso, un nodo foglia contiene un solo item_indices)
-            for(uint i : node->item_indices)
+            // Se è una foglia vuol dire che ha un solo item_indices
+            assert(node->item_indices.size() == 1);
+
+            // Se quell'item contiene il vec3d p
+            if(items.at(node->item_indices[0])->contains(p,strict))
             {
-                // Se quell'item contiene il vec3d p
-                if(items.at(i)->contains(p,strict))
+                // L'id prende il valore di quel item
+                id = items.at(node->item_indices[0])->id;
+
+                // Viene stampato il tempo e si ritorna true
+                if(print_debug_info)
                 {
-                    // L'id prende il valore di quel item
-                    id = items.at(i)->id;
-                    // Viene stampato il tempo e si ritorna true
-                    if(print_debug_info)
-                    {
-                        Time::time_point t1 = Time::now();
-                        std::cout << "Contains query (first item)\t" << how_many_seconds(t0,t1) << " seconds" << std::endl;
-                    }
-                    return true;
+                    Time::time_point t1 = Time::now();
+                    std::cout << "Contains query (first item)\t" << how_many_seconds(t0,t1) << " seconds" << std::endl;
                 }
+
+                return true;
+
             }
         }
     }
